@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>XTB – kalkulačka zisku a straty</title>
+<style>
+:root{--bg:#faf9f7;--card:#ffffff;--soft:#f1efe8;--ink:#1a1a19;--ink2:#52514e;--mut:#898781;--line:#e1e0d9;--acc:#2a78d6;--acc2:#eb6834;--pos:#0a7a3d;--neg:#c0332f;--r:10px}
+@media(prefers-color-scheme:dark){:root{--bg:#161615;--card:#1f1f1e;--soft:#272725;--ink:#f0efec;--ink2:#c3c2b7;--mut:#898781;--line:#34342f;--acc:#3987e5;--acc2:#e8794a;--pos:#4cc98a;--neg:#f07a76}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:24px 16px 64px}
+h1{font-size:24px;font-weight:600;margin:0 0 4px}
+h2{font-size:16px;font-weight:600;margin:28px 0 10px}
+p.sub{margin:0 0 20px;color:var(--ink2);font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+#drop{border:2px dashed var(--line);border-radius:12px;padding:28px 16px;text-align:center;cursor:pointer;background:var(--card);transition:border-color .15s}
+#drop:hover,#drop.over{border-color:var(--acc)}
+#drop strong{display:block;font-size:16px;margin-bottom:4px}
+#drop span{font-size:14px;color:var(--ink2)}
+button,select,input[type=number]{font:inherit;font-size:14px;color:var(--ink);background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+button{cursor:pointer}
+button:hover{border-color:var(--mut)}
+button.link{border:0;background:none;color:var(--acc);padding:0;text-decoration:underline}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.field label{display:block;font-size:13px;color:var(--ink2);margin-bottom:4px}
+.field select{width:100%}
+.seg{display:flex;gap:0}
+.seg button{border-radius:0;margin-left:-1px;flex:1}
+.seg button:first-child{border-radius:8px 0 0 8px;margin-left:0}
+.seg button:last-child{border-radius:0 8px 8px 0}
+.seg button.on{background:var(--acc);border-color:var(--acc);color:#fff}
+.row{display:flex;align-items:center;gap:12px;margin:10px 0}
+.row label{font-size:14px;color:var(--ink2);min-width:150px}
+.row input[type=range]{flex:1;accent-color:var(--acc)}
+.row input[type=number]{width:110px;text-align:right}
+.pre{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 0}
+.pre button{font-size:13px;padding:4px 10px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin:16px 0}
+.m{background:var(--soft);border-radius:var(--r);padding:12px 14px}
+.m .l{font-size:13px;color:var(--ink2);margin:0 0 2px}
+.m .n{font-size:21px;font-weight:600;margin:0;font-variant-numeric:tabular-nums}
+.pos{color:var(--pos)}.neg{color:var(--neg)}
+.legend{display:flex;flex-wrap:wrap;gap:16px;font-size:12px;color:var(--ink2);margin:8px 0}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+.chartbox{position:relative;width:100%;height:340px}
+table{width:100%;border-collapse:collapse;font-size:14px;font-variant-numeric:tabular-nums}
+th,td{padding:6px 8px;text-align:right;border-bottom:1px solid var(--line)}
+th:first-child,td:first-child{text-align:left}
+th{font-weight:600;color:var(--ink2);font-size:13px}
+tfoot td{font-weight:600;border-bottom:0}
+.tw{overflow-x:auto}
+#err{display:none;color:var(--neg);margin:12px 0;font-size:14px}
+.note{font-size:13px;color:var(--ink2);margin:6px 0}
+.hide{display:none}
+</style>
+</head>
+<body>
+<main>
+<h1>XTB – kalkulačka zisku a straty</h1>
+<p class="sub">Nahraj výkaz z XTB (Excel) a posuvníkom zmeň cenu akcie. Súbor sa nikam neodosiela, všetko sa počíta len vo tvojom prehliadači.</p>
+
+<div id="drop" tabindex="0" role="button" aria-label="Nahrať výkaz XTB vo formáte xlsx">
+  <strong>Pretiahni sem výkaz XTB alebo klikni a vyber súbor</strong>
+  <span>Formát .xlsx z xStation (História / Export). Používa sa hárok „Open Positions“.</span>
+  <input type="file" id="file" accept=".xlsx,.xls" class="hide">
+</div>
+<p class="note">Nemáš po ruke výkaz? <button class="link" id="demo" type="button">Vyskúšať s ukážkovými (vymyslenými) údajmi</button></p>
+<div id="err" role="alert"></div>
+
+<div id="app" class="hide">
+  <h2>Nastavenia</h2>
+  <div class="card">
+    <div class="grid">
+      <div class="field"><label for="tk">Akcia (ticker)</label><select id="tk"></select></div>
+      <div class="field"><label>Mena tvojho účtu</label>
+        <div class="seg" id="acct"><button type="button" data-c="EUR">EUR</button><button type="button" data-c="USD">USD</button></div>
+      </div>
+      <div class="field"><label for="ic">Mena akcie</label><select id="ic"></select></div>
+    </div>
+    <p class="note" id="info"></p>
+  </div>
+
+  <h2>Cena akcie</h2>
+  <div class="card">
+    <div class="row"><label for="p">Cena akcie (<span class="ic">USD</span>)</label><input type="range" id="p"><input type="number" id="pn" step="any"></div>
+    <div class="row" id="fxrow"><label for="fx">Kurz (<span class="ic">USD</span> za 1 <span class="ac">EUR</span>)</label><input type="range" id="fx"><input type="number" id="fxn" step="any"></div>
+    <div class="pre" id="pre"></div>
+  </div>
+
+  <div class="cards" id="cards"></div>
+
+  <div class="legend">
+    <span><i style="background:var(--acc)"></i>Zisk / strata podľa ceny</span>
+    <span><i style="background:var(--acc2)"></i>Zvolená cena</span>
+    <span><i style="background:var(--mut)"></i>Break-even</span>
+    <span><i style="background:var(--ink)"></i>Cena vo výkaze</span>
+  </div>
+  <div class="chartbox"><canvas id="c" role="img" aria-label="Graf zisku a straty podľa ceny akcie">Zisk alebo strata rastie lineárne s cenou akcie. Break-even je cena, pri ktorej je zisk nulový.</canvas></div>
+
+  <h2>Jednotlivé nákupy pri zvolenej cene</h2>
+  <div class="tw"><table id="lots"></table></div>
+
+  <h2>Ako sa to počíta</h2>
+  <p class="note" id="how"></p>
+</div>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<script>
+var CURS=['EUR','USD','PLN','CZK','GBP','CHF','HUF','RON'];
+var SUFFIX={US:'USD',DE:'EUR',FR:'EUR',NL:'EUR',IT:'EUR',ES:'EUR',BE:'EUR',FI:'EUR',PT:'EUR',IE:'EUR',AT:'EUR',UK:'GBP',PL:'PLN',CZ:'CZK',CH:'CHF',HU:'HUF',RO:'RON'};
+var S={data:null,tk:null,acct:'EUR',ic:'USD',fileName:'',chart:null};
+
+function $(id){return document.getElementById(id)}
+function fmt(n,d){if(d===undefined)d=2;return n.toLocaleString('sk-SK',{minimumFractionDigits:d,maximumFractionDigits:d})}
+function sg(n,d){return (n<0?'−':'+')+fmt(Math.abs(n),d)}
+function cls(n){return n<0?'neg':'pos'}
+function showErr(m){var e=$('err');e.textContent=m||'';e.style.display=m?'block':'none'}
+function instrCur(ticker){var p=String(ticker).split('.');return SUFFIX[p[p.length-1]]||'USD'}
+
+function pickSheet(wb,key,fallbackIdx){
+  var n=wb.SheetNames.find(function(x){return x.toLowerCase().replace(/\s/g,'').indexOf(key)>-1});
+  return wb.Sheets[n||wb.SheetNames[fallbackIdx]];
+}
+function findCol(h,names,fb){
+  for(var i=0;i<h.length;i++){var v=h[i];if(typeof v!=='string')continue;v=v.trim().toLowerCase();
+    for(var j=0;j<names.length;j++){var nm=names[j];
+      if(nm.charAt(0)==='='?v===nm.slice(1):v.indexOf(nm)===0)return i}}
+  return fb;
+}
+function parseWorkbook(wb,fileName){
+  var ws=pickSheet(wb,'openpositions',2);
+  if(!ws)throw new Error('Nenašiel som hárok „Open Positions“.');
+  var rows=XLSX.utils.sheet_to_json(ws,{header:1,raw:true,defval:''});
+  var acct=null,asOf=null,hi=-1;
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i];
+    if(typeof r[1]==='string'&&/open position value/i.test(r[1])&&typeof r[3]==='string'&&r[3])acct=r[3].trim().toUpperCase();
+    if(typeof r[0]==='string'&&/data as of|generated/i.test(r[0])&&r[1])asOf=r[1];
+    if(typeof r[0]==='string'&&/^product$/i.test(r[0].trim())&&typeof r[2]==='string'&&/ticker/i.test(r[2])){hi=i;break}
+  }
+  if(hi<0)throw new Error('V hárku „Open Positions“ som nenašiel tabuľku s pozíciami (hlavička s „Ticker“).');
+  if(!acct){var m=String(fileName).match(/^([A-Za-z]{3})[_-]/);if(m)acct=m[1].toUpperCase()}
+  var h=rows[hi];
+  var c={instr:findCol(h,['instrument'],1),tk:findCol(h,['ticker'],2),type:findCol(h,['=type'],4),vol:findCol(h,['volume'],5),val:findCol(h,['=value'],6),cur:findCol(h,['current price'],7),open:findCol(h,['open price'],8),time:findCol(h,['open time'],9),np:findCol(h,['=net profit'],13)};
+  var T={},shorts=0;
+  for(var k=hi+1;k<rows.length;k++){
+    var q=rows[k],tk=q[c.tk];
+    if(!tk||typeof tk!=='string')continue;
+    var type=String(q[c.type]||'').toUpperCase();
+    if(!T[tk])T[tk]={ticker:tk,name:tk,lots:[],sumRow:null};
+    if(type===''){T[tk].name=q[c.instr]||tk;T[tk].sumRow={vol:+q[c.vol],val:+q[c.val],open:+q[c.open],np:+q[c.np]};continue}
+    if(type==='SELL'){shorts++;continue}
+    if(type!=='BUY')continue;
+    var lot={id:String(q[c.instr]),vol:+q[c.vol],valAcct:+q[c.val],npAcct:+q[c.np],cur:+q[c.cur],open:+q[c.open],time:q[c.time]};
+    if(isFinite(lot.vol)&&isFinite(lot.valAcct)&&isFinite(lot.open))T[tk].lots.push(lot);
+  }
+  var list=Object.keys(T).map(function(x){return T[x]}).filter(function(x){return x.lots.length});
+  if(!list.length)throw new Error('Vo výkaze som nenašiel žiadne otvorené pozície typu BUY.');
+  list.forEach(function(t){t.lots.sort(function(a,b){return (a.time instanceof Date&&b.time instanceof Date)?a.time-b.time:0});
+    t.valAcct=t.lots.reduce(function(s,l){return s+l.valAcct},0)});
+  list.sort(function(a,b){return b.valAcct-a.valAcct});
+  return {acct:acct||'EUR',asOf:asOf,list:list,shorts:shorts,fileName:fileName};
+}
+
+function totals(t){
+  var vol=0,costI=0,val=0,np=0,cv=0;
+  t.lots.forEach(function(l){vol+=l.vol;costI+=l.vol*l.open;val+=l.valAcct;np+=l.npAcct;if(isFinite(l.cur)&&l.cur>0)cv+=l.vol*l.cur});
+  var cur=cv>0?cv/vol:(t.lots[0].open);
+  return {vol:vol,costI:costI,costA:val-np,val:val,cur:cur,fx:(cv>0&&val>0)?cv/val:1,avg:costI/vol};
+}
+
+function loadData(d){
+  S.data=d;S.fileName=d.fileName||'';
+  var sel=$('tk');sel.innerHTML='';
+  d.list.forEach(function(t){var o=document.createElement('option');o.value=t.ticker;o.textContent=t.ticker+' – '+t.name;sel.appendChild(o)});
+  var pref=d.list.find(function(t){return t.ticker==='NVDA.US'})||d.list[0];
+  sel.value=pref.ticker;
+  S.acct=CURS.indexOf(d.acct)>-1?d.acct:'EUR';
+  var ic=$('ic');ic.innerHTML='';CURS.forEach(function(c){var o=document.createElement('option');o.value=c;o.textContent=c;ic.appendChild(o)});
+  $('app').classList.remove('hide');
+  selectTicker(pref.ticker);
+}
+function selectTicker(tk){
+  S.tk=S.data.list.find(function(t){return t.ticker===tk});
+  S.ic=instrCur(tk);$('ic').value=S.ic;
+  S.T=totals(S.tk);
+  setupControls();
+}
+function setupControls(){
+  var T=S.T,p=$('p'),n=$('pn'),f=$('fx'),fn=$('fxn');
+  var cur=T.cur;
+  var step=cur<10?0.05:cur<100?0.25:cur<1000?0.5:5;
+  S.min=Math.max(step,Math.floor(cur*0.5/step)*step);S.max=Math.ceil(cur*1.5/step)*step;
+  p.min=S.min;p.max=S.max;p.step=step;p.value=cur;n.step=step;n.value=cur.toFixed(2);S.P=cur;
+  var ef=eff().fx;S.fx0=ef;S.fxv=ef;
+  f.min=(ef*0.85).toFixed(4);f.max=(ef*1.15).toFixed(4);f.step=0.001;f.value=ef;fn.value=ef.toFixed(4);
+  render(true);
+}
+function eff(){
+  var T=S.T,det=S.data.acct;
+  if(S.acct===det)return {fx:det===S.ic?1:T.fx,native:false,warn:false};
+  if(S.acct===S.ic)return {fx:1,native:true,warn:false};
+  return {fx:det===S.ic?1:T.fx,native:false,warn:true};
+}
+function same(){var e=eff();return e.fx===1&&(e.native||S.acct===S.ic||S.data.acct===S.ic)}
+function costA(){return eff().native?S.T.costI:S.T.costA}
+function lotCost(l){return eff().native?l.vol*l.open:l.valAcct-l.npAcct}
+function curFx(){return same()?1:(S.fxv||1)}
+function price(){return S.P}
+
+function render(full){
+  var T=S.T,P=price(),fx=curFx(),A=S.acct,I=S.ic,sm=same();
+  document.querySelectorAll('.ic').forEach(function(e){e.textContent=I});
+  document.querySelectorAll('.ac').forEach(function(e){e.textContent=A});
+  $('fxrow').classList.toggle('hide',sm);
+  document.querySelectorAll('#acct button').forEach(function(b){b.classList.toggle('on',b.dataset.c===A)});
+  var CA=costA(),value=T.vol*P/fx,pl=value-CA,plI=T.vol*P-T.costI,be=CA*fx/T.vol;
+  var cards=[
+    ['Aktuálna hodnota pozície',fmt(value)+' '+A,''],
+    ['Zisk / strata ('+A+')',sg(pl)+' '+A,cls(pl)],
+    ['Zisk / strata (%)',sg(pl/CA*100)+' %',cls(pl)]
+  ];
+  if(!sm)cards.push(['Zisk / strata ('+I+')',sg(plI)+' '+I,cls(plI)]);
+  cards.push(['Break-even cena',fmt(be)+' '+I,'']);
+  cards.push(['Investované',fmt(CA)+' '+A,'']);
+  cards.push(['Počet akcií',fmt(T.vol,4),'']);
+  cards.push(['Priemerná nákupná cena',fmt(T.avg)+' '+I,'']);
+  $('cards').innerHTML=cards.map(function(c){return '<div class="m"><p class="l">'+c[0]+'</p><p class="n '+c[2]+'">'+c[1]+'</p></div>'}).join('');
+  var asOf=S.data.asOf instanceof Date?S.data.asOf.toLocaleString('sk-SK'):(S.data.asOf||'');
+  $('info').textContent=(S.fileName?'Súbor: '+S.fileName+'. ':'')+'Cena vo výkaze: '+fmt(T.cur)+' '+I+(asOf?' (stav k '+asOf+')':'')+'. Mena účtu sa určila z výkazu ('+S.data.acct+'). Ak prepneš na menu akcie, výsledok sa ukáže v nej.';
+  $('how').textContent='Investovaná suma v mene účtu = hodnota pozície − čistý zisk z výkazu (zahŕňa skutočný kurz v čase nákupu).'
+    +(eff().native?' Výsledok je zobrazený v mene akcie ('+I+'), preto sa nepoužíva kurz a investovaná suma je počet akcií × nákupná cena.':'')
+    +(eff().warn?' Pozor: výkaz je v '+S.data.acct+', ale zvolil si inú menu účtu, takže sa sumy z výkazu berú ako '+A+'.':'')
+    +(sm?' Mena akcie a účtu je rovnaká, kurz sa nepoužíva.':' Hodnota pri zvolenej cene = počet akcií × cena ÷ kurz; kurz vo výkaze je '+fmt(S.fx0,4)+' '+I+' za 1 '+A+'. Zisk v mene účtu preto závisí aj od kurzu.')
+    +' Dividendy a prípadné poplatky mimo čistého zisku v tabuľke nie sú zahrnuté. Nejde o investičné poradenstvo.';
+  lotsTable(P,fx);
+  chart(full,P,fx,be,pl);
+}
+
+function lotsTable(P,fx){
+  var A=S.acct,I=S.ic,sm=same(),T=S.T;
+  var h='<thead><tr><th>Dátum nákupu</th><th>Počet</th><th>Nákupná cena ('+I+')</th><th>Investované ('+A+')</th><th>Zisk / strata ('+A+')</th>'+(sm?'':'<th>Zisk / strata ('+I+')</th>')+'</tr></thead><tbody>';
+  var sA=0,sI=0;
+  T.costRows=[];
+  S.tk.lots.forEach(function(l){
+    var cost=lotCost(l),pa=l.vol*P/fx-cost,pi=l.vol*(P-l.open);sA+=pa;sI+=pi;
+    var d=l.time instanceof Date?l.time.toLocaleDateString('sk-SK'):'';
+    h+='<tr><td>'+d+'</td><td>'+fmt(l.vol,4)+'</td><td>'+fmt(l.open)+'</td><td>'+fmt(cost)+'</td><td class="'+cls(pa)+'">'+sg(pa)+'</td>'+(sm?'':'<td class="'+cls(pi)+'">'+sg(pi)+'</td>')+'</tr>';
+  });
+  h+='</tbody><tfoot><tr><td>Spolu</td><td>'+fmt(T.vol,4)+'</td><td>'+fmt(T.avg)+'</td><td>'+fmt(costA())+'</td><td class="'+cls(sA)+'">'+sg(sA)+'</td>'+(sm?'':'<td class="'+cls(sI)+'">'+sg(sI)+'</td>')+'</tr></tfoot>';
+  $('lots').innerHTML=h;
+}
+
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function plAt(x,fx){return S.T.vol*x/fx-costA()}
+function chart(full,P,fx,be,pl){
+  var T=S.T,A=S.acct;
+  var pts=[],n=60,dx=(S.max-S.min)/n;
+  for(var i=0;i<=n;i++){var x=S.min+i*dx;pts.push({x:x,y:Math.round(plAt(x,fx)*100)/100})}
+  var colAcc=css('--acc'),colAcc2=css('--acc2'),colMut=css('--mut'),colInk=css('--ink'),grid=css('--line'),ink2=css('--ink2'),card=css('--card');
+  var data={datasets:[
+    {type:'line',data:pts,borderColor:colAcc,backgroundColor:colAcc+'22',borderWidth:2,pointRadius:0,fill:{target:'origin'},order:4},
+    {data:[{x:P,y:Math.round(pl*100)/100}],backgroundColor:colAcc2,borderColor:card,borderWidth:2,pointRadius:8,order:1},
+    {data:[{x:be,y:0}],backgroundColor:colMut,borderColor:card,borderWidth:2,pointRadius:6,pointStyle:'rectRot',order:3},
+    {data:[{x:T.cur,y:Math.round(plAt(T.cur,fx)*100)/100}],backgroundColor:colInk,borderColor:card,borderWidth:2,pointRadius:6,pointStyle:'triangle',order:2}
+  ]};
+  if(S.chart&&!full){S.chart.data=data;S.chart.options.scales.x.min=S.min;S.chart.options.scales.x.max=S.max;S.chart.options.scales.y.title.text='Zisk / strata ('+A+')';S.chart.update('none');return}
+  if(S.chart)S.chart.destroy();
+  S.chart=new Chart($('c'),{type:'scatter',data:data,options:{responsive:true,maintainAspectRatio:false,animation:false,
+    interaction:{mode:'nearest',axis:'x',intersect:false},
+    plugins:{legend:{display:false},tooltip:{callbacks:{
+      title:function(i){return fmt(i[0].parsed.x)+' '+S.ic},
+      label:function(c){return (c.datasetIndex===2?'Break-even: ':'Zisk / strata: ')+sg(c.parsed.y)+' '+S.acct}}}},
+    scales:{
+      x:{type:'linear',min:S.min,max:S.max,title:{display:true,text:'Cena akcie',color:ink2},grid:{display:false},ticks:{color:colMut},border:{color:grid}},
+      y:{title:{display:true,text:'Zisk / strata ('+A+')',color:ink2},grid:{color:function(c){return c.tick.value===0?ink2:grid}},ticks:{color:colMut,callback:function(v){return fmt(v,0)}},border:{display:false}}
+    }}});
+}
+
+function sync(from){
+  var v=parseFloat(from.value);if(!isFinite(v))return;
+  if(from.id==='p'||from.id==='pn')S.P=v;
+  if(from.id==='fx'||from.id==='fxn')S.fxv=v;
+  if(from.id==='p')$('pn').value=v;
+  if(from.id==='pn')$('p').value=v;
+  if(from.id==='fx')$('fxn').value=v.toFixed(4);
+  if(from.id==='fxn')$('fx').value=v;
+  render(false);
+}
+['p','pn','fx','fxn'].forEach(function(id){$(id).addEventListener('input',function(){sync(this)})});
+$('tk').addEventListener('change',function(){selectTicker(this.value)});
+$('ic').addEventListener('change',function(){S.ic=this.value;setupControls()});
+$('acct').addEventListener('click',function(e){var b=e.target.closest('button');if(!b)return;S.acct=b.dataset.c;setupControls()});
+
+function buildPresets(){
+  var T=S.T,box=$('pre');box.innerHTML='';
+  var list=[['Cena vo výkaze ('+fmt(T.cur)+')',T.cur],['−10 %',T.cur*0.9],['−20 %',T.cur*0.8],['+10 %',T.cur*1.1],['+20 %',T.cur*1.2],['Break-even',null]];
+  list.forEach(function(it){var b=document.createElement('button');b.type='button';b.textContent=it[0];
+    b.onclick=function(){var v=it[1]===null?costA()*curFx()/T.vol:it[1];v=Math.min(S.max,Math.max(S.min,v));S.P=v;$('pn').value=v.toFixed(2);$('p').value=v;render(false)};
+    box.appendChild(b)});
+}
+var _setup=setupControls;
+setupControls=function(){_setup();buildPresets()};
+
+function handleFile(f){
+  showErr('');
+  if(!f)return;
+  var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var wb=XLSX.read(new Uint8Array(rd.result),{type:'array',cellDates:true});
+      loadData(parseWorkbook(wb,f.name));
+    }catch(e){showErr((e&&e.message)||'Súbor sa nepodarilo načítať.')}
+  };
+  rd.onerror=function(){showErr('Súbor sa nepodarilo prečítať.')};
+  rd.readAsArrayBuffer(f);
+}
+var drop=$('drop'),fi=$('file');
+drop.addEventListener('click',function(){fi.click()});
+drop.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click()}});
+fi.addEventListener('change',function(){handleFile(fi.files[0]);fi.value=''});
+['dragenter','dragover'].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.add('over')})});
+['dragleave','drop'].forEach(function(ev){drop.addEventListener(ev,function(e){e.preventDefault();drop.classList.remove('over')})});
+drop.addEventListener('drop',function(e){handleFile(e.dataTransfer.files[0])});
+$('demo').addEventListener('click',function(){
+  showErr('');
+  var mk=function(d,v,o,c){var val=v*c/1.10;return {id:'demo',vol:v,valAcct:val,npAcct:val-v*o/1.12,cur:c,open:o,time:new Date(d)}};
+  loadData({acct:'EUR',asOf:new Date(),fileName:'ukážkové údaje (vymyslené)',shorts:0,list:[
+    {ticker:'DEMO.US',name:'Ukážková akcia',lots:[mk('2024-12-20',2,100,150),mk('2025-06-11',1.5,130,150),mk('2025-11-07',1,170,150)]}]});
+});
+if(window.matchMedia)matchMedia('(prefers-color-scheme: dark)').addEventListener('change',function(){if(S.data)render(true)});
+</script>
+</body>
+</html>
